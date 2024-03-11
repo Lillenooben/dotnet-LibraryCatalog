@@ -1,0 +1,21 @@
+GET http://localhost:5052/
+
+###
+GET http://localhost:5052/libraryitems?sort=type
+
+###
+GET http://localhost:5052/libraryitems
+
+###
+GET http://localhost:5052/categories
+
+###
+GET http://localhost:5052/categories/2
+
+###
+POST http://localhost:5052/categories
+content-type: application/json
+
+{
+    "name": "Fantasy"
+}

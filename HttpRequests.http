@@ -1,7 +1,7 @@
 GET http://localhost:5052/
 
 ###
-GET http://localhost:5052/libraryitems?sort=type
+GET http://localhost:5052/libraryitems?sort=category
 
 ###
 GET http://localhost:5052/libraryitems
@@ -10,12 +10,23 @@ GET http://localhost:5052/libraryitems
 GET http://localhost:5052/categories
 
 ###
-GET http://localhost:5052/categories/2
+GET http://localhost:5052/categories/1
 
 ###
 POST http://localhost:5052/categories
 content-type: application/json
 
 {
-    "name": "Fantasy"
+    "name": "Newly"
 }
+
+###
+PUT http://localhost:5052/categories/1
+content-type: application/json
+
+{
+    "name": "Mystery"
+}
+
+###
+DELETE http://localhost:5052/categories/8

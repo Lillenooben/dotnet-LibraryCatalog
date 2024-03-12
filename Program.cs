@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using Microsoft.AspNetCore.Http.HttpResults;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -17,45 +18,30 @@ app.MapGet("/", () => "Hello World!");
 //---------CATEGORIES ENDPOINTS---------
 
 app.MapGet("/categories", (DbObject db) => {
-    //Returns a list of categories 
-    var query = db.SelectCategories();
-    var entries = new List<Category>();
+    //Returns a list of all categories 
+    var listOfCategoryResults = db.SelectCategories();
 
-    while(query.Read()) {
-        var categoryId = query.GetInt32(0);
-        var categoryName = query.GetString(1);
-        entries.Add(new Category(categoryId, categoryName));
-    }
-
-    return entries;
+    return TypedResults.Ok(listOfCategoryResults);
 });
 
-app.MapGet("/categories/{id}", Results<Ok<List<Category>>, NotFound, IResult> (DbObject db, int id) => {
+app.MapGet("/categories/{id}", Results<Ok<List<Category>>, NoContent, IResult> (DbObject db, int id) => {
     //Returns a category by its id 
-    var query = db.SelectCategoryById(id);
-    var entries = new List<Category>();
+    var listOfCategoryResults = db.SelectCategoryById(id);
 
-    while(query.Read()) {
-        var categoryId = query.GetInt32(0);
-        var categoryName = query.GetString(1);
-        entries.Add(new Category(categoryId, categoryName));
-    }
-
-    return entries.Count > 0 ? TypedResults.Ok(entries) : TypedResults.NotFound();
+    return listOfCategoryResults.Count > 0 ? TypedResults.Ok(listOfCategoryResults) : TypedResults.NoContent();
 });
 
-app.MapPost("/categories", (DbObject db, CategoryName category) => {
+app.MapPost("/categories", Results<Created, BadRequest<Dictionary<string, string[]>>> (DbObject db, CategoryName category) => {
     //Creates a new category (the category model should be passed in the request body)
+    
     try {
-        var query = db.InsertCategory(category.Name);
-
+        db.InsertCategory(category.Name);
         return TypedResults.Created("/categories");
     } catch(Exception e) {
         var errors = new Dictionary<string, string[]>{
             { nameof(category)+"."+nameof(category.Name), [e.Message] }
         };
-
-        return Results.ValidationProblem(errors);
+        return TypedResults.BadRequest(errors);
     }
 })
 .AddEndpointFilter(async (context, next) => {
@@ -72,23 +58,93 @@ app.MapPost("/categories", (DbObject db, CategoryName category) => {
     return await next(context);
 });
 
-app.MapPut("/categories/{id}", (int id) => {
+app.MapPut("/categories/{id}", Results<Ok, BadRequest<Dictionary<string, string[]>>>(DbObject db, int id, CategoryName categoryName) => {
     //Updates a category 
-    throw new NotImplementedException();
+    Category category = new Category(id, categoryName.Name);
+    try {
+        db.UpdateCategory(category);
+        return TypedResults.Ok();
+    } catch(Exception e) {
+        var errors = new Dictionary<string, string[]>{
+            { nameof(category)+"."+nameof(category.Name), [e.Message] }
+        };
+        return TypedResults.BadRequest(errors);
+    }
+})
+.AddEndpointFilter(async (context, next) => {
+    var id = context.GetArgument<int>(1);
+    var categoryName = context.GetArgument<CategoryName>(2);
+    Category category = new Category(id, categoryName.Name);
+    var db = context.GetArgument<DbObject>(0);
+    var listOfCategoryResults = db.SelectCategories();
+
+    var errors = new Dictionary<string, string[]>();
+    
+    if(!listOfCategoryResults.Exists(x => x.Id == category.Id)) {
+        errors.Add(nameof(category.Id), [$"Category with id {category.Id} does not exist"]);
+    }
+    if(listOfCategoryResults.Exists(x => x.Name == category.Name)) {
+        errors.Add(nameof(category.Name), [$"Category named {category.Name} already exist"]);
+    }
+    if(category.Name.Length < 1) {
+        errors.Add(nameof(category), ["Category name must not be empty"]);
+    }
+    if(errors.Count > 0) {
+        return Results.ValidationProblem(errors);
+    }
+
+    return await next(context);
 });
 
-app.MapDelete("/categories/{id}", (int id) => {
+app.MapDelete("/categories/{id}", Results<NoContent, BadRequest<Dictionary<string, string[]>>> (DbObject db, int id) => {
     //Deletes a category by its id 
-    throw new NotImplementedException();
+    try {
+        db.DeleteCategoryById(id);
+        return TypedResults.NoContent();
+    } catch (Exception e) {
+        var errors = new Dictionary<string, string[]>{
+            { nameof(db), [e.Message] }
+        };
+        return TypedResults.BadRequest(errors);
+    }
 });
 
 //---------LIBRARYITEMS ENDPOINTS---------
 
-app.MapGet("/libraryitems", (HttpContext context) => {
+app.MapGet("/libraryitems", Results<Ok<List<LibraryItem>>, BadRequest<Dictionary<string, string[]>>>(HttpContext context, DbObject db) => {
     //return all libraryitems with sorting
     var hasSortValue = context.Request.Query.TryGetValue("sort", out var sortValue);
 
-    return hasSortValue ? sortValue[0] : "NoResults";
+    try {
+        var listOfLibraryItems = db.SelectLibraryItems(sortValue);
+        
+        return TypedResults.Ok(listOfLibraryItems);
+    } catch (Exception e) {
+        var errors = new Dictionary<string, string[]>{
+            { nameof(db), [e.Message] }
+        };
+
+        return TypedResults.BadRequest(errors);
+    }
+})
+.AddEndpointFilter(async (context, next) => {
+    var httpContext = context.GetArgument<HttpContext>(0);
+
+    var hasSortValue = httpContext.Request.Query.TryGetValue("sort", out var sortValue);
+    List<string> sortTypes = ["type", "category"];
+
+    var errors = new Dictionary<string, string[]>();
+
+    if(hasSortValue) {
+        if(!sortTypes.Exists(x => x.Equals(sortValue.ToString(), StringComparison.CurrentCultureIgnoreCase))) {
+            errors.Add(nameof(sortTypes), [$"Sort query doenst match available sorting types ['type', 'category']"]);
+        }
+    }
+    if(errors.Count > 0) {
+        return Results.ValidationProblem(errors);
+    }
+
+    return await next(context);
 });
 
 app.MapGet("/libraryitems/{id}", (int id) => {
@@ -125,6 +181,6 @@ app.Run();
 
 public record CategoryName(string Name);
 
-public record Category(int Id, string Name);
+public record Category(long Id, string Name);
 
-public record LibraryItem(int Id, int CategoryId, string Title, string Type, string Author, int Pages, int RunTimeMinutes, bool IsBorrowable, string Borrower, DateTime Date);
+public record LibraryItem(long Id, int CategoryId, string? Title, string Type, string? Author, int? Pages, int? RunTimeMinutes, bool? IsBorrowable, string? Borrower, DateTime? Date);

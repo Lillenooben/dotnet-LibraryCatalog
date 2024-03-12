@@ -6,24 +6,60 @@ public class DbObject {
     public DbObject() {
         connection = new("Data Source=LibraryCatalog.db");
 
-        CreateTable();
+        CreateTables();
     }
 
-    public void CreateTable() {
+    public List<Category> ListOfCategoriesFromReader(SqliteDataReader reader){
+        var entries = new List<Category>();
+
+        while(reader.Read()) {
+            entries.Add(new Category((long)reader["id"], (string)reader["name"]));
+        }
+        return entries;
+    }
+
+    public List<LibraryItem> ListOfLibraryItemsFromReader(SqliteDataReader reader){
+        var entries = new List<LibraryItem>();
+        //public record LibraryItem(int Id, int CategoryId, string Title, string Type, string Author, int Pages, int RunTimeMinutes, bool IsBorrowable, string Borrower, DateTime Date);
+        while(reader.Read()) {
+            entries.Add(new LibraryItem((long)reader["id"], (int)reader["categoryId"], (string?)reader["title"], (string)reader["type"], (string?)reader["author"], (int?)reader["pages"], (int?)reader["runTimeMinutes"], (bool?)reader["isBorrowable"], (string?)reader["borrower"], (DateTime?)reader["date"]));
+        }
+        return entries;
+    }
+
+    public void CreateTables() {
         connection.Open();
-        var createTableCommand = connection.CreateCommand();
-        createTableCommand.CommandText =
+        var createCategoryTableCommand = connection.CreateCommand();
+        createCategoryTableCommand.CommandText =
         @"
             CREATE TABLE IF NOT EXISTS category_table(
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL UNIQUE
             )
         ";
-
-        createTableCommand.ExecuteReader();
+        createCategoryTableCommand.ExecuteReader();
+        
+        var createLibraryItemsTableCommand = connection.CreateCommand();
+        createLibraryItemsTableCommand.CommandText =
+        @"
+            CREATE TABLE IF NOT EXISTS libraryitems_table(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                categoryId INTEGER NOT NULL,
+                title TEXT,
+                type TEXT NOT NULL,
+                author TEXT,
+                pages INTEGER,
+                runTimeMinutes INTEGER,
+                isBorrowable INTEGER,
+                borrower TEXT,
+                date TEXT
+            )
+        ";
+        createLibraryItemsTableCommand.ExecuteReader();
+        //public record LibraryItem(int Id, int CategoryId, string Title, string Type, string Author, int Pages, int RunTimeMinutes, bool IsBorrowable, string Borrower, DateTime Date);
     }
 
-    public SqliteDataReader InsertCategory(string categoryName) {
+    public void InsertCategory(string categoryName) {
         try {
             connection.Open();
             var insertIntoCategoryCommand = connection.CreateCommand();
@@ -32,7 +68,7 @@ public class DbObject {
                 INSERT INTO category_table VALUES (NULL, @Entry);
             ";
             insertIntoCategoryCommand.Parameters.AddWithValue("@Entry", categoryName);
-            return insertIntoCategoryCommand.ExecuteReader();
+            insertIntoCategoryCommand.ExecuteReader();
         } catch (SqliteException e) {
             Console.WriteLine(e);
             Console.WriteLine(e.ErrorCode);
@@ -44,7 +80,7 @@ public class DbObject {
         }
     }
 
-    public SqliteDataReader SelectCategories() {
+    public List<Category> SelectCategories() {
         try {
             connection.Open();
             var selectCategoriesCommand = connection.CreateCommand();
@@ -52,7 +88,9 @@ public class DbObject {
             @"
                 SELECT * FROM category_table;
             ";
-            return selectCategoriesCommand.ExecuteReader();
+            var queryResult = selectCategoriesCommand.ExecuteReader();
+            return ListOfCategoriesFromReader(queryResult);
+
         } catch (SqliteException e) {
             Console.WriteLine(e);
             Console.WriteLine(e.ErrorCode);
@@ -61,7 +99,7 @@ public class DbObject {
         }
     }
 
-    public SqliteDataReader SelectCategoryById(int id) {
+    public List<Category> SelectCategoryById(int id) {
         try {
             connection.Open();
             var selectCategoryByIdCommand = connection.CreateCommand();
@@ -71,7 +109,81 @@ public class DbObject {
                 WHERE id = $id;
             ";
             selectCategoryByIdCommand.Parameters.AddWithValue("$id", id);
-            return selectCategoryByIdCommand.ExecuteReader();
+            var queryResult = selectCategoryByIdCommand.ExecuteReader();
+
+            return ListOfCategoriesFromReader(queryResult);
+        } catch (SqliteException e) {
+            Console.WriteLine(e);
+            Console.WriteLine(e.ErrorCode);
+            connection.Dispose();
+            throw;
+        }
+    }
+
+    public void UpdateCategory(Category category) {
+        try {
+            connection.Open();
+
+            var updateCategoryCommand = connection.CreateCommand();
+            updateCategoryCommand.CommandText =
+            @"
+                UPDATE category_table
+                SET name = $name
+                WHERE id = $id;
+            ";
+            updateCategoryCommand.Parameters.AddWithValue("$name", category.Name);
+            updateCategoryCommand.Parameters.AddWithValue("$id", category.Id);
+            updateCategoryCommand.ExecuteReader();
+        } catch (SqliteException e) {
+            Console.WriteLine(e);
+            Console.WriteLine(e.ErrorCode);
+            connection.Dispose();
+            throw;
+        }
+    }
+
+    public void DeleteCategoryById(int id) {
+        try {
+            connection.Open();
+
+            var deleteCategoryById = connection.CreateCommand();
+            deleteCategoryById.CommandText =
+            @"
+                DELETE FROM category_table
+                WHERE id = $id;
+            ";
+            deleteCategoryById.Parameters.AddWithValue("$id", id);
+            deleteCategoryById.ExecuteReader();
+        } catch (SqliteException e) {
+            Console.WriteLine(e);
+            Console.WriteLine(e.ErrorCode);
+            connection.Dispose();
+            throw;
+        }
+    }
+    
+    public List<LibraryItem> SelectLibraryItems(string? sortType) {
+        try {
+            connection.Open();
+
+            var entries = new List<LibraryItem>();
+            var selectLibraryItems = connection.CreateCommand();
+            if(sortType != null) {
+                selectLibraryItems.CommandText =
+                @"
+                    SELECT * FROM libraryitems_table
+                    ORDER BY @sortType ASC;
+                ";
+                selectLibraryItems.Parameters.AddWithValue("@sortType", sortType);
+            } else {
+                selectLibraryItems.CommandText =
+                @"
+                    SELECT * FROM libraryitems_table;
+                ";
+            }
+            var queryResult = selectLibraryItems.ExecuteReader();
+            return ListOfLibraryItemsFromReader(queryResult);
+
         } catch (SqliteException e) {
             Console.WriteLine(e);
             Console.WriteLine(e.ErrorCode);

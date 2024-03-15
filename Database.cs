@@ -1,3 +1,4 @@
+using System.Data;
 using Microsoft.Data.Sqlite;
 
 
@@ -9,25 +10,69 @@ public class DbObject {
         CreateTables();
     }
 
-    public List<Category> ListOfCategoriesFromReader(SqliteDataReader reader){
+    private string ReturnTitleWithAcronym(string title) {
+        string abbreviation = "";
+
+        for(int i = 0; i < title.Length; i++) {
+            if(i == 0) {
+                abbreviation += title[i];
+            } else if (char.IsNumber(title[i])) {
+                abbreviation += title[i];
+            } else if (title[i-1] == ' ') {
+                abbreviation += title[i];
+            }
+        }
+        return $"{title} ({abbreviation})";
+    }
+
+    private LibraryItem NewLibraryItemFromReader(SqliteDataReader reader) {
+        
+
+        return new LibraryItem((long)reader["id"], 
+        (long)reader["categoryId"], 
+        reader["title"] != DBNull.Value ? ReturnTitleWithAcronym((string?)reader["title"]!): null, 
+        (string)reader["type"], 
+        reader["author"] != DBNull.Value ? (string?)reader["author"] : null, 
+        reader["pages"] != DBNull.Value ? (long?)reader["pages"] : null, 
+        reader["runTimeMinutes"] != DBNull.Value ? (long?)reader["runTimeMinutes"] : null, 
+        (long)reader["isBorrowable"] == 1 ? true : false, 
+        reader["borrower"] != DBNull.Value ? (string?)reader["borrower"] : null, 
+        reader["date"] != DBNull.Value ? DateTime.UnixEpoch.AddSeconds((double)reader["date"]).ToString("dd/MM/yyyy") : null);
+    }
+
+    private Category NewCategoryFromReader(SqliteDataReader reader) {
+        return new Category((long)reader["id"], (string)reader["name"]);
+    }
+
+    private List<Category> ListOfCategoriesFromReader(SqliteDataReader reader) {
         var entries = new List<Category>();
 
         while(reader.Read()) {
-            entries.Add(new Category((long)reader["id"], (string)reader["name"]));
+            entries.Add(NewCategoryFromReader(reader));
         }
         return entries;
     }
 
-    public List<LibraryItem> ListOfLibraryItemsFromReader(SqliteDataReader reader){
+    private List<LibraryItem> ListOfLibraryItemsFromReader(SqliteDataReader reader) {
         var entries = new List<LibraryItem>();
         //public record LibraryItem(int Id, int CategoryId, string Title, string Type, string Author, int Pages, int RunTimeMinutes, bool IsBorrowable, string Borrower, DateTime Date);
         while(reader.Read()) {
-            entries.Add(new LibraryItem((long)reader["id"], (int)reader["categoryId"], (string?)reader["title"], (string)reader["type"], (string?)reader["author"], (int?)reader["pages"], (int?)reader["runTimeMinutes"], (bool?)reader["isBorrowable"], (string?)reader["borrower"], (DateTime?)reader["date"]));
+            entries.Add(NewLibraryItemFromReader(reader));
         }
         return entries;
     }
 
-    public void CreateTables() {
+    private Category SingleCategoryFromReader(SqliteDataReader reader) {
+        reader.Read();
+        return NewCategoryFromReader(reader);
+    }
+
+    private LibraryItem SingleLibraryItemFromReader(SqliteDataReader reader) {
+        reader.Read();
+        return NewLibraryItemFromReader(reader);
+    }
+
+    private void CreateTables() {
         connection.Open();
         var createCategoryTableCommand = connection.CreateCommand();
         createCategoryTableCommand.CommandText =
@@ -52,7 +97,7 @@ public class DbObject {
                 runTimeMinutes INTEGER,
                 isBorrowable INTEGER,
                 borrower TEXT,
-                date TEXT
+                date INTEGER
             )
         ";
         createLibraryItemsTableCommand.ExecuteReader();
@@ -62,13 +107,13 @@ public class DbObject {
     public void InsertCategory(string categoryName) {
         try {
             connection.Open();
-            var insertIntoCategoryCommand = connection.CreateCommand();
-            insertIntoCategoryCommand.CommandText = 
+            var insertCategoryCommand = connection.CreateCommand();
+            insertCategoryCommand.CommandText = 
             @"
-                INSERT INTO category_table VALUES (NULL, @Entry);
+                INSERT INTO category_table VALUES (NULL, $Name);
             ";
-            insertIntoCategoryCommand.Parameters.AddWithValue("@Entry", categoryName);
-            insertIntoCategoryCommand.ExecuteReader();
+            insertCategoryCommand.Parameters.AddWithValue("$Name", categoryName.Trim());
+            insertCategoryCommand.ExecuteReader();
         } catch (SqliteException e) {
             Console.WriteLine(e);
             Console.WriteLine(e.ErrorCode);
@@ -99,7 +144,7 @@ public class DbObject {
         }
     }
 
-    public List<Category> SelectCategoryById(int id) {
+    public Category SelectCategoryById(int id) {
         try {
             connection.Open();
             var selectCategoryByIdCommand = connection.CreateCommand();
@@ -111,7 +156,13 @@ public class DbObject {
             selectCategoryByIdCommand.Parameters.AddWithValue("$id", id);
             var queryResult = selectCategoryByIdCommand.ExecuteReader();
 
-            return ListOfCategoriesFromReader(queryResult);
+            if(queryResult.HasRows) {
+                return SingleCategoryFromReader(queryResult);
+            } else {
+                throw new Exception("No results");
+            }
+
+            
         } catch (SqliteException e) {
             Console.WriteLine(e);
             Console.WriteLine(e.ErrorCode);
@@ -124,6 +175,16 @@ public class DbObject {
         try {
             connection.Open();
 
+            var listOfCategoryResults = SelectCategories();
+            var trimmedName = category.Name.Trim();
+    
+            if(!listOfCategoryResults.Exists(x => x.Id == category.Id)) {
+                throw new Exception($"Category with id {category.Id} does not exist");
+            }
+            if(listOfCategoryResults.Exists(x => x.Name == trimmedName)) {
+                throw new Exception($"Category named {trimmedName} already exist");
+            }
+
             var updateCategoryCommand = connection.CreateCommand();
             updateCategoryCommand.CommandText =
             @"
@@ -131,7 +192,7 @@ public class DbObject {
                 SET name = $name
                 WHERE id = $id;
             ";
-            updateCategoryCommand.Parameters.AddWithValue("$name", category.Name);
+            updateCategoryCommand.Parameters.AddWithValue("$name", trimmedName);
             updateCategoryCommand.Parameters.AddWithValue("$id", category.Id);
             updateCategoryCommand.ExecuteReader();
         } catch (SqliteException e) {
@@ -145,6 +206,11 @@ public class DbObject {
     public void DeleteCategoryById(int id) {
         try {
             connection.Open();
+
+            var listOfLibraryItemsWithCategoryId = SelectLibraryItemsByCategoryId(id);
+
+            if(listOfLibraryItemsWithCategoryId.Count > 0)
+                throw new Exception("Category is not empty");
 
             var deleteCategoryById = connection.CreateCommand();
             deleteCategoryById.CommandText =
@@ -165,16 +231,15 @@ public class DbObject {
     public List<LibraryItem> SelectLibraryItems(string? sortType) {
         try {
             connection.Open();
-
-            var entries = new List<LibraryItem>();
             var selectLibraryItems = connection.CreateCommand();
             if(sortType != null) {
+                if(sortType == "category")
+                    sortType = sortType + "Id";
                 selectLibraryItems.CommandText =
                 @"
                     SELECT * FROM libraryitems_table
-                    ORDER BY @sortType ASC;
-                ";
-                selectLibraryItems.Parameters.AddWithValue("@sortType", sortType);
+                    ORDER BY "+ sortType +" ASC; ";
+                Console.WriteLine("\n"+ sortType);
             } else {
                 selectLibraryItems.CommandText =
                 @"
@@ -184,6 +249,211 @@ public class DbObject {
             var queryResult = selectLibraryItems.ExecuteReader();
             return ListOfLibraryItemsFromReader(queryResult);
 
+        } catch (SqliteException e) {
+            Console.WriteLine(e);
+            Console.WriteLine(e.ErrorCode);
+            connection.Dispose();
+            throw;
+        }
+    }
+
+    public List<LibraryItem> SelectLibraryItemsByCategoryId(int categoryId) {
+        try {
+            connection.Open();
+            var selectLibraryItemsByCategoryId = connection.CreateCommand();
+            selectLibraryItemsByCategoryId.CommandText =
+            @"
+                SELECT * FROM libraryitems_table
+                WHERE categoryId = $categoryId; 
+            ";
+            
+            var queryResult = selectLibraryItemsByCategoryId.ExecuteReader();
+            return ListOfLibraryItemsFromReader(queryResult);
+
+        } catch (SqliteException e) {
+            Console.WriteLine(e);
+            Console.WriteLine(e.ErrorCode);
+            connection.Dispose();
+            throw;
+        }
+    }
+
+    public LibraryItem SelectLibraryItemById(int id) {
+        try {
+            connection.Open();
+
+            var selectLibraryItemById = connection.CreateCommand();
+            selectLibraryItemById.CommandText = 
+            @"
+                SELECT * FROM libraryitems_table
+                WHERE id = $id;
+            ";
+            selectLibraryItemById.Parameters.AddWithValue("$id", id);
+
+            var queryResult = selectLibraryItemById.ExecuteReader();
+
+            if(queryResult.HasRows) {
+                return SingleLibraryItemFromReader(queryResult);
+            } else {
+                throw new Exception("No results for id: " + id);
+            }
+
+
+        } catch (SqliteException e) {
+            Console.WriteLine(e);
+            Console.WriteLine(e.ErrorCode);
+            connection.Dispose();
+            throw;
+        }
+    }
+
+    public void InsertLibraryItem(LibraryItemInput libraryItemInput) {
+        try {
+            connection.Open();
+            var insertLibraryItemCommand = connection.CreateCommand();
+            //long Id, int CategoryId, string? Title, string Type, string? Author, int? Pages, int? RunTimeMinutes, bool IsBorrowable, string? Borrower, DateTime? BorrowDate
+
+            insertLibraryItemCommand.CommandText = 
+            @"
+                INSERT INTO libraryitems_table VALUES (NULL, $CategoryId, $Title, $Type, $Author, $Pages, $RunTimeMinutes, $IsBorrowable, NULL, NULL);
+            ";
+            insertLibraryItemCommand.Parameters.AddWithValue("$CategoryId", libraryItemInput.CategoryId);
+            insertLibraryItemCommand.Parameters.AddWithValue("$Title", libraryItemInput.Title != null ? libraryItemInput.Title.Trim() : DBNull.Value);
+            insertLibraryItemCommand.Parameters.AddWithValue("$Type", libraryItemInput.Type);
+            insertLibraryItemCommand.Parameters.AddWithValue("$Author", libraryItemInput.Author != null ? libraryItemInput.Author.Trim() : DBNull.Value);
+            insertLibraryItemCommand.Parameters.AddWithValue("$Pages", libraryItemInput.Pages != null ? libraryItemInput.Pages : DBNull.Value);
+            insertLibraryItemCommand.Parameters.AddWithValue("$RunTimeMinutes", libraryItemInput.RunTimeMinutes != null ? libraryItemInput.RunTimeMinutes : DBNull.Value);
+
+            Enum.TryParse(libraryItemInput.Type.ToUpper(), out LibraryItemType libraryItemType);
+            insertLibraryItemCommand.Parameters.AddWithValue("$IsBorrowable", libraryItemType != LibraryItemType.REFERENCEBOOK ? 1 : 0);
+
+            insertLibraryItemCommand.ExecuteReader();
+        } catch (SqliteException e) {
+            Console.WriteLine(e);
+            Console.WriteLine(e.ErrorCode);
+            connection.Dispose();
+            throw;
+        }
+    }
+
+    public void BorrowLibraryItem(int id, string name) {
+        try {
+            connection.Open();
+            var borrowLibraryItemCommand = connection.CreateCommand();
+
+            var singleLibraryitem = SelectLibraryItemById(id);
+            if(!singleLibraryitem.IsBorrowable)
+                throw new Exception("Item type is not borrowable");
+            if(singleLibraryitem.BorrowDate != null)
+                throw new Exception("Item is currently borrowed by: " + singleLibraryitem.Borrower);
+
+
+            var dueDate = DateTimeOffset.Now.AddDays(14);
+            var dueDateUnix = dueDate.ToUnixTimeSeconds();
+
+            borrowLibraryItemCommand.CommandText = 
+            @"
+                UPDATE libraryitems_table
+                SET borrower = $name, date = $date
+                WHERE id = $id
+            ";
+
+            borrowLibraryItemCommand.Parameters.AddWithValue("$name", name.Trim());
+            borrowLibraryItemCommand.Parameters.AddWithValue("$date", dueDateUnix);
+            borrowLibraryItemCommand.Parameters.AddWithValue("$id", id);
+
+            borrowLibraryItemCommand.ExecuteReader();
+
+        } catch (SqliteException e) {
+            Console.WriteLine(e);
+            Console.WriteLine(e.ErrorCode);
+            connection.Dispose();
+            throw;
+        }
+    }
+
+    public void ReturnLibraryItem(int id) {
+        try {
+            connection.Open();
+            var borrowLibraryItemCommand = connection.CreateCommand();
+
+            var singleLibraryitem = SelectLibraryItemById(id);
+            if(!singleLibraryitem.IsBorrowable)
+                throw new Exception("Item type is not borrowable");
+            if(singleLibraryitem.BorrowDate == null)
+                throw new Exception("Item is not currently borrowed by anyone");
+
+            borrowLibraryItemCommand.CommandText = 
+            @"
+                UPDATE libraryitems_table
+                SET borrower = NULL, date = NULL
+                WHERE id = $id
+            ";
+            borrowLibraryItemCommand.Parameters.AddWithValue("$id", id);
+
+            borrowLibraryItemCommand.ExecuteReader();
+
+        } catch (SqliteException e) {
+            Console.WriteLine(e);
+            Console.WriteLine(e.ErrorCode);
+            connection.Dispose();
+            throw;
+        }
+    }
+    
+    public void UpdateLibraryItem(int id, LibraryItemInput libraryItemInput) {
+        try {
+            connection.Open();
+            var updateLibraryItemCommand = connection.CreateCommand();
+            //long Id, int CategoryId, string? Title, string Type, string? Author, int? Pages, int? RunTimeMinutes, bool IsBorrowable, string? Borrower, DateTime? BorrowDate
+
+            var singleLibraryitem = SelectLibraryItemById(id);
+
+            if(singleLibraryitem.Borrower != null) {
+                throw new Exception("Cant update item that is currently borrowed");
+            }
+            if(libraryItemInput.Type != singleLibraryitem.Type) {
+
+            }
+
+            updateLibraryItemCommand.CommandText = 
+            @"
+                UPDATE libraryitems_table 
+                SET categoryId = $CategoryId, title = $Title, type = $Type, author = $Author, pages = $Pages, runTimeMinutes = $RunTimeMinutes, isBorrowable = $IsBorrowable, borrower = NULL, date = NULL
+                WHERE id = $id;
+            ";
+            updateLibraryItemCommand.Parameters.AddWithValue("$CategoryId", libraryItemInput.CategoryId);
+            updateLibraryItemCommand.Parameters.AddWithValue("$Title", libraryItemInput.Title != null ? libraryItemInput.Title.Trim() : DBNull.Value);
+            updateLibraryItemCommand.Parameters.AddWithValue("$Type", libraryItemInput.Type);
+            updateLibraryItemCommand.Parameters.AddWithValue("$Author", libraryItemInput.Author != null ? libraryItemInput.Author.Trim() : DBNull.Value);
+            updateLibraryItemCommand.Parameters.AddWithValue("$Pages", libraryItemInput.Pages != null ? libraryItemInput.Pages : DBNull.Value);
+            updateLibraryItemCommand.Parameters.AddWithValue("$RunTimeMinutes", libraryItemInput.RunTimeMinutes != null ? libraryItemInput.RunTimeMinutes : DBNull.Value);
+
+            Enum.TryParse(libraryItemInput.Type.ToUpper(), out LibraryItemType libraryItemType);
+            updateLibraryItemCommand.Parameters.AddWithValue("$IsBorrowable", libraryItemType != LibraryItemType.REFERENCEBOOK ? 1 : 0);
+            updateLibraryItemCommand.Parameters.AddWithValue("$id", id);
+
+            updateLibraryItemCommand.ExecuteReader();
+        } catch (SqliteException e) {
+            Console.WriteLine(e);
+            Console.WriteLine(e.ErrorCode);
+            connection.Dispose();
+            throw;
+        }
+    }
+
+    public void DeleteLibraryItemById(int id) {
+        try {
+            connection.Open();
+
+            var deleteLibraryItemById = connection.CreateCommand();
+            deleteLibraryItemById.CommandText =
+            @"
+                DELETE FROM libraryitems_table
+                WHERE id = $id;
+            ";
+            deleteLibraryItemById.Parameters.AddWithValue("$id", id);
+            deleteLibraryItemById.ExecuteReader();
         } catch (SqliteException e) {
             Console.WriteLine(e);
             Console.WriteLine(e.ErrorCode);

@@ -1,5 +1,6 @@
-using System.Collections.Specialized;
+using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,20 +25,35 @@ app.MapGet("/categories", (DbObject db) => {
     return TypedResults.Ok(listOfCategoryResults);
 });
 
-app.MapGet("/categories/{id}", Results<Ok<List<Category>>, NoContent, IResult> (DbObject db, int id) => {
-    //Returns a category by its id 
-    var listOfCategoryResults = db.SelectCategoryById(id);
-
-    return listOfCategoryResults.Count > 0 ? TypedResults.Ok(listOfCategoryResults) : TypedResults.NoContent();
+app.MapGet("/libraryjson", (HttpContext context) => {
+    return TypedResults.Ok(new LibraryItemInput(7, "fanta", "Book", "Mr.Tolk", 100, null, null, null));
 });
 
-app.MapPost("/categories", Results<Created, BadRequest<Dictionary<string, string[]>>> (DbObject db, CategoryName category) => {
-    //Creates a new category (the category model should be passed in the request body)
+app.MapGet("/categories/{id}", Results<Ok<Category>, BadRequest<Dictionary<string, string[]>>> (HttpContext context, DbObject db, int id) => {
+    //Returns a category by its id 
+    try {
+        Category singleCategory = db.SelectCategoryById(id);
+        return TypedResults.Ok(singleCategory);
+
+    } catch (Exception e) {
+        Console.WriteLine(e);
+        var errors = new Dictionary<string, string[]>{
+            { context.Request.GetDisplayUrl() , [e.Message] }
+        };
+        return TypedResults.BadRequest(errors);
+    }
     
+});
+
+app.MapPost("/categories", Results<Created, BadRequest<Dictionary<string, string[]>>> (DbObject db, NameInput category) => {
+    //Creates a new category (the category model should be passed in the request body)
+
     try {
         db.InsertCategory(category.Name);
         return TypedResults.Created("/categories");
     } catch(Exception e) {
+        Console.WriteLine(e);
+        Console.WriteLine(e.Message);
         var errors = new Dictionary<string, string[]>{
             { nameof(category)+"."+nameof(category.Name), [e.Message] }
         };
@@ -45,10 +61,10 @@ app.MapPost("/categories", Results<Created, BadRequest<Dictionary<string, string
     }
 })
 .AddEndpointFilter(async (context, next) => {
-    var categoryNameArgument = context.GetArgument<CategoryName>(1);
+    var categoryNameArgument = context.GetArgument<NameInput>(1).Name.Trim();
     var errors = new Dictionary<string, string[]>();
 
-    if(categoryNameArgument.Name.Length < 1) {
+    if(categoryNameArgument.Length < 1) {
         errors.Add(nameof(categoryNameArgument), ["Category name must not be empty"]);
     }
     if(errors.Count > 0) {
@@ -58,7 +74,7 @@ app.MapPost("/categories", Results<Created, BadRequest<Dictionary<string, string
     return await next(context);
 });
 
-app.MapPut("/categories/{id}", Results<Ok, BadRequest<Dictionary<string, string[]>>>(DbObject db, int id, CategoryName categoryName) => {
+app.MapPut("/categories/{id}", Results<Ok, BadRequest<Dictionary<string, string[]>>>(DbObject db, int id, NameInput categoryName) => {
     //Updates a category 
     Category category = new Category(id, categoryName.Name);
     try {
@@ -72,22 +88,11 @@ app.MapPut("/categories/{id}", Results<Ok, BadRequest<Dictionary<string, string[
     }
 })
 .AddEndpointFilter(async (context, next) => {
-    var id = context.GetArgument<int>(1);
-    var categoryName = context.GetArgument<CategoryName>(2);
-    Category category = new Category(id, categoryName.Name);
-    var db = context.GetArgument<DbObject>(0);
-    var listOfCategoryResults = db.SelectCategories();
-
+    var categoryName = context.GetArgument<NameInput>(2).Name.Trim();
     var errors = new Dictionary<string, string[]>();
-    
-    if(!listOfCategoryResults.Exists(x => x.Id == category.Id)) {
-        errors.Add(nameof(category.Id), [$"Category with id {category.Id} does not exist"]);
-    }
-    if(listOfCategoryResults.Exists(x => x.Name == category.Name)) {
-        errors.Add(nameof(category.Name), [$"Category named {category.Name} already exist"]);
-    }
-    if(category.Name.Length < 1) {
-        errors.Add(nameof(category), ["Category name must not be empty"]);
+
+    if(categoryName.Length < 1) {
+        errors.Add(nameof(categoryName), ["Field: CategoryName must not be empty"]);
     }
     if(errors.Count > 0) {
         return Results.ValidationProblem(errors);
@@ -96,14 +101,14 @@ app.MapPut("/categories/{id}", Results<Ok, BadRequest<Dictionary<string, string[
     return await next(context);
 });
 
-app.MapDelete("/categories/{id}", Results<NoContent, BadRequest<Dictionary<string, string[]>>> (DbObject db, int id) => {
+app.MapDelete("/categories/{id}", Results<NoContent, BadRequest<Dictionary<string, string[]>>> (HttpContext context, DbObject db, int id) => {
     //Deletes a category by its id 
     try {
         db.DeleteCategoryById(id);
         return TypedResults.NoContent();
     } catch (Exception e) {
         var errors = new Dictionary<string, string[]>{
-            { nameof(db), [e.Message] }
+            { context.Request.GetDisplayUrl(), [e.Message] }
         };
         return TypedResults.BadRequest(errors);
     }
@@ -121,14 +126,14 @@ app.MapGet("/libraryitems", Results<Ok<List<LibraryItem>>, BadRequest<Dictionary
         return TypedResults.Ok(listOfLibraryItems);
     } catch (Exception e) {
         var errors = new Dictionary<string, string[]>{
-            { nameof(db), [e.Message] }
+            { nameof(e), [e.Message] }
         };
 
         return TypedResults.BadRequest(errors);
     }
 })
 .AddEndpointFilter(async (context, next) => {
-    var httpContext = context.GetArgument<HttpContext>(0);
+    var httpContext = context.HttpContext;
 
     var hasSortValue = httpContext.Request.Query.TryGetValue("sort", out var sortValue);
     List<string> sortTypes = ["type", "category"];
@@ -137,7 +142,7 @@ app.MapGet("/libraryitems", Results<Ok<List<LibraryItem>>, BadRequest<Dictionary
 
     if(hasSortValue) {
         if(!sortTypes.Exists(x => x.Equals(sortValue.ToString(), StringComparison.CurrentCultureIgnoreCase))) {
-            errors.Add(nameof(sortTypes), [$"Sort query doenst match available sorting types ['type', 'category']"]);
+            errors.Add(httpContext.Request.GetDisplayUrl(), ["Sort query doenst match available sorting types ['type', 'category']"]);
         }
     }
     if(errors.Count > 0) {
@@ -147,40 +152,214 @@ app.MapGet("/libraryitems", Results<Ok<List<LibraryItem>>, BadRequest<Dictionary
     return await next(context);
 });
 
-app.MapGet("/libraryitems/{id}", (int id) => {
+app.MapGet("/libraryitems/{id}", Results<Ok<LibraryItem>, BadRequest<Dictionary<string, string[]>>> (HttpContext context, DbObject db, int id) => {
     //Returns a specific library item by its id 
-    throw new NotImplementedException();
+    try {
+        LibraryItem singleLibraryitem = db.SelectLibraryItemById(id);
+        return TypedResults.Ok(singleLibraryitem);
+
+    } catch (Exception e) {
+        Console.WriteLine(e);
+        var errors = new Dictionary<string, string[]>{
+            { context.Request.GetDisplayUrl() , [e.Message] }
+        };
+        return TypedResults.BadRequest(errors);
+    }
 });
 
-app.MapPost("/libraryitems", (HttpContext context) => {
+app.MapPost("/libraryitems", Results<Created, BadRequest<Dictionary<string, string[]>>> (DbObject db, LibraryItemInput libraryItemInput) => {
     //Creates a new library item. Depending on the type of item being created certain rules may apply.
-    throw new NotImplementedException();
+    //long Id, int CategoryId, string? Title, string Type, string? Author, int? Pages, int? RunTimeMinutes, bool IsBorrowable, string? Borrower, DateTime? BorrowDate
+    try {
+        db.InsertLibraryItem(libraryItemInput);
+        return TypedResults.Created("/categories");
+    } catch(Exception e) {
+        Console.WriteLine(e);
+        Console.WriteLine(e.Message);
+        var errors = new Dictionary<string, string[]>{
+            { nameof(libraryItemInput), [e.Message] }
+        };
+        
+        return TypedResults.BadRequest(errors);
+    }
+})
+.AddEndpointFilter(async (context, next) => {
+    var libraryItem = context.GetArgument<LibraryItemInput>(1);
+    var errors = new Dictionary<string, string[]>();
+
+    var validLibraryItem = Enum.TryParse(libraryItem.Type.ToUpper(), out LibraryItemType libraryItemType);
+
+    if(!validLibraryItem) {
+        errors.Add(nameof(libraryItem.Type), ["Field: Type is invalid " + libraryItem.Type]);
+        return Results.ValidationProblem(errors);
+    }
+
+    if(libraryItemType == LibraryItemType.BOOK || libraryItemType == LibraryItemType.REFERENCEBOOK) {
+        if(libraryItem.Title == null || libraryItem.Title.Trim().Length <= 0) {
+            errors.Add(nameof(libraryItem.Title), ["Field: Title must not be empty for type: " + libraryItem.Type]);
+        }
+        if(libraryItem.Author == null || libraryItem.Author.Trim().Length <= 0) {
+            errors.Add(nameof(libraryItem.Author), ["Field: Author must not be empty for type: " + libraryItem.Type]);
+        }
+        if(libraryItem.Pages == null || libraryItem.Pages <= 0) {
+            errors.Add(nameof(libraryItem.Pages), ["Field: Pages is empty or invalid for type: " + libraryItem.Type]);
+        }
+    } else { //if Type is DVD or AudioBook
+        if(libraryItem.Title == null || libraryItem.Title.Trim().Length <= 0) {
+            errors.Add(nameof(libraryItem.Title), ["Field: Title must not be empty for type: " + libraryItem.Type]);
+        }
+        if(libraryItem.RunTimeMinutes == null || libraryItem.RunTimeMinutes <= 0) {
+            errors.Add(nameof(libraryItem.RunTimeMinutes), ["Field: RunTimeMinutes is empty or invalid for type: " + libraryItem.Type]);
+        }
+
+    }
+    if(errors.Count > 0) {
+        return Results.ValidationProblem(errors);
+    }
+
+    return await next(context);
 });
 
-app.MapPost("/libraryitems/{id}/borrow", (int id) => {
+app.MapPost("/libraryitems/{id}/borrow", Results<Ok, BadRequest<Dictionary<string, string[]>>> (DbObject db, int id, [FromBody] NameInput name) => {
     //Borrow a library item. The Borrower name should be passed in the request body.
-    throw new NotImplementedException();
+    try {
+        db.BorrowLibraryItem(id, name.Name);
+        return TypedResults.Ok();
+    } catch (Exception e) {
+        Console.WriteLine(e);
+        Console.WriteLine(e.Message);
+        var errors = new Dictionary<string, string[]>{
+            { "Libraryitem id: " + id, [e.Message] }
+        };
+        
+        return TypedResults.BadRequest(errors);
+    }
+})
+.AddEndpointFilter(async (context, next) => {
+    var libraryItemId = context.GetArgument<int>(1);
+    var errors = new Dictionary<string, string[]>();
+
+    var borrowerName = context.GetArgument<NameInput>(2).Name.Trim();
+
+    if(borrowerName.Length <= 0)
+        errors.Add(nameof(borrowerName), ["Field: Name is empty"]);
+    if(libraryItemId <= 0)
+        errors.Add(nameof(libraryItemId), ["Field: Id is out of scope"]);
+    
+    if(errors.Count > 0) {
+        return Results.ValidationProblem(errors);
+    }
+
+    return await next(context);
 });
 
-app.MapPost("/libraryitems/{id}/return", (int id) => {
+app.MapPost("/libraryitems/{id}/return", Results<Ok, BadRequest<Dictionary<string, string[]>>> (DbObject db, int id) => {
     //Returns a borrowed library item. The item should now be able to be borrowed by another user.
-    throw new NotImplementedException();
+    try {
+        db.ReturnLibraryItem(id);
+        return TypedResults.Ok();
+    } catch (Exception e) {
+        Console.WriteLine(e);
+        Console.WriteLine(e.Message);
+        var errors = new Dictionary<string, string[]>{
+            { "Libraryitem id: " + id, [e.Message] }
+        };
+        
+        return TypedResults.BadRequest(errors);
+    }
+})
+.AddEndpointFilter(async (context, next) => {
+    var libraryItemId = context.GetArgument<int>(1);
+    var errors = new Dictionary<string, string[]>();
+
+    if(libraryItemId <= 0)
+            errors.Add(nameof(libraryItemId), ["Field: Id is out of scope"]);
+    
+    if(errors.Count > 0) {
+        return Results.ValidationProblem(errors);
+    }
+
+    return await next(context);
 });
 
-app.MapPut("/libraryitems/{id}", (int id) => {
+app.MapPut("/libraryitems/{id}", Results<Ok, BadRequest<Dictionary<string, string[]>>> (DbObject db, int id, [FromBody]LibraryItemInput libraryItemInput) => {
     //Updates an existing library item. Depending on the type of item certain rules may apply. 
-    throw new NotImplementedException();
+    try {
+        db.UpdateLibraryItem(id, libraryItemInput);
+        return TypedResults.Ok();
+    } catch (Exception e) {
+        Console.WriteLine(e);
+        Console.WriteLine(e.Message);
+        var errors = new Dictionary<string, string[]>{
+            { "Libraryitem id: " + id, [e.Message] }
+        };
+        
+        return TypedResults.BadRequest(errors);
+    }
+})
+.AddEndpointFilter(async (context, next) => {
+    var libraryItem = context.GetArgument<LibraryItemInput>(2);
+    var errors = new Dictionary<string, string[]>();
+
+    var validLibraryItem = Enum.TryParse(libraryItem.Type.ToUpper(), out LibraryItemType libraryItemType);
+
+    if(!validLibraryItem) {
+        errors.Add(nameof(libraryItem.Type), ["Field: Type is invalid " + libraryItem.Type]);
+        return Results.ValidationProblem(errors);
+    }
+
+    if(libraryItemType == LibraryItemType.BOOK || libraryItemType == LibraryItemType.REFERENCEBOOK) {
+        if(libraryItem.Title == null || libraryItem.Title.Trim().Length <= 0) {
+            errors.Add(nameof(libraryItem.Title), ["Field: Title must not be empty for type: " + libraryItem.Type]);
+        }
+        if(libraryItem.Author == null || libraryItem.Author.Trim().Length <= 0) {
+            errors.Add(nameof(libraryItem.Author), ["Field: Author must not be empty for type: " + libraryItem.Type]);
+        }
+        if(libraryItem.Pages == null || libraryItem.Pages <= 0) {
+            errors.Add(nameof(libraryItem.Pages), ["Field: Pages is empty or invalid for type: " + libraryItem.Type]);
+        }
+    } else { //if Type is DVD or AudioBook
+        if(libraryItem.Title == null || libraryItem.Title.Trim().Length <= 0) {
+            errors.Add(nameof(libraryItem.Title), ["Field: Title must not be empty for type: " + libraryItem.Type]);
+        }
+        if(libraryItem.RunTimeMinutes == null || libraryItem.RunTimeMinutes <= 0) {
+            errors.Add(nameof(libraryItem.RunTimeMinutes), ["Field: RunTimeMinutes is empty or invalid for type: " + libraryItem.Type]);
+        }
+
+    }
+    if(errors.Count > 0) {
+        return Results.ValidationProblem(errors);
+    }
+
+    return await next(context);
 });
 
-app.MapDelete("/libraryitems/{id}", (int id) => {
+app.MapDelete("/libraryitems/{id}", Results<NoContent, BadRequest<Dictionary<string, string[]>>> (DbObject db, int id) => {
     //Deletes a library item by its id 
-    throw new NotImplementedException();
+    try {
+        db.DeleteLibraryItemById(id);
+        return TypedResults.NoContent();
+    } catch (Exception e) {
+        var errors = new Dictionary<string, string[]>{
+            { nameof(db) , [e.Message] }
+        };
+        return TypedResults.BadRequest(errors);
+    }
 });
 
 app.Run();
 
-public record CategoryName(string Name);
+public enum LibraryItemType {
+    BOOK,
+    REFERENCEBOOK,
+    DVD,
+    AUDIOBOOK
+}
+
+public record LibraryItemInput(int CategoryId, string? Title, string Type, string? Author, int? Pages, int? RunTimeMinutes, string? Borrower, string? BorrowDate);
+
+public record NameInput(string Name);
 
 public record Category(long Id, string Name);
 
-public record LibraryItem(long Id, int CategoryId, string? Title, string Type, string? Author, int? Pages, int? RunTimeMinutes, bool? IsBorrowable, string? Borrower, DateTime? Date);
+public record LibraryItem(long Id, long CategoryId, string? Title, string Type, string? Author, long? Pages, long? RunTimeMinutes, bool IsBorrowable, string? Borrower, string? BorrowDate);

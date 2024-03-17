@@ -19,7 +19,7 @@ public static class CategoryRouteBuilder {
                 Console.WriteLine(e);
                 Console.WriteLine(e.Message);
                 var errors = new Dictionary<string, string[]>{
-                    { nameof(Exception), [e.Message] }
+                    { "Category id: " + id, [e.Message] }
                 };
                 return TypedResults.BadRequest(errors);
             }
@@ -35,7 +35,7 @@ public static class CategoryRouteBuilder {
                 Console.WriteLine(e);
                 Console.WriteLine(e.Message);
                 var errors = new Dictionary<string, string[]>{
-                    { nameof(category)+"."+nameof(category.Name), [e.Message] }
+                    { "CategoryName: " + category.Name, [e.Message] }
                 };
                 return TypedResults.BadRequest(errors);
             }
@@ -64,7 +64,7 @@ public static class CategoryRouteBuilder {
                 Console.WriteLine(e);
                 Console.WriteLine(e.Message);
                 var errors = new Dictionary<string, string[]>{
-                    { nameof(category)+"."+nameof(category.Name), [e.Message] }
+                    { "Category id: " + id + " CategoryName: " + category.Name, [e.Message] }
                 };
                 return TypedResults.BadRequest(errors);
             }
@@ -92,7 +92,7 @@ public static class CategoryRouteBuilder {
                 Console.WriteLine(e);
                 Console.WriteLine(e.Message);
                 var errors = new Dictionary<string, string[]>{
-                    { nameof(Exception), [e.Message] }
+                    { "Category id: " + id, [e.Message] }
                 };
                 return TypedResults.BadRequest(errors);
             }

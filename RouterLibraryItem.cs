@@ -17,7 +17,7 @@ public static class LibraryItemRouteBuilder {
                 Console.WriteLine(e);
                 Console.WriteLine(e.Message);
                 var errors = new Dictionary<string, string[]>{
-                    { nameof(Exception), [e.Message] }
+                    { "Error: ", [e.Message] }
                 };
 
                 return TypedResults.BadRequest(errors);
@@ -51,7 +51,7 @@ public static class LibraryItemRouteBuilder {
             } catch (Exception e) {
                 Console.WriteLine(e);
                 var errors = new Dictionary<string, string[]>{
-                    { nameof(Exception) , [e.Message] }
+                    { "LibraryItem id: " + id, [e.Message] }
                 };
                 return TypedResults.BadRequest(errors);
             }
@@ -67,7 +67,7 @@ public static class LibraryItemRouteBuilder {
                 Console.WriteLine(e);
                 Console.WriteLine(e.Message);
                 var errors = new Dictionary<string, string[]>{
-                    { nameof(Exception), [e.Message] }
+                    { nameof(libraryItemInput) , [e.Message] }
                 };
                 
                 return TypedResults.BadRequest(errors);
@@ -119,7 +119,7 @@ public static class LibraryItemRouteBuilder {
                 Console.WriteLine(e);
                 Console.WriteLine(e.Message);
                 var errors = new Dictionary<string, string[]>{
-                    { nameof(Exception), [e.Message] }
+                    { "LibraryItem id: " + id, [e.Message] }
                 };
                 
                 return TypedResults.BadRequest(errors);
@@ -152,7 +152,7 @@ public static class LibraryItemRouteBuilder {
                 Console.WriteLine(e);
                 Console.WriteLine(e.Message);
                 var errors = new Dictionary<string, string[]>{
-                    { nameof(Exception), [e.Message] }
+                    { "LibraryItem id: " + id, [e.Message] }
                 };
                 
                 return TypedResults.BadRequest(errors);
@@ -181,7 +181,7 @@ public static class LibraryItemRouteBuilder {
                 Console.WriteLine(e);
                 Console.WriteLine(e.Message);
                 var errors = new Dictionary<string, string[]>{
-                    { "Libraryitem id: " + id, [e.Message] }
+                    { "LibraryItem id: " + id, [e.Message] }
                 };
                 
                 return TypedResults.BadRequest(errors);
@@ -231,7 +231,7 @@ public static class LibraryItemRouteBuilder {
                 return TypedResults.NoContent();
             } catch (Exception e) {
                 var errors = new Dictionary<string, string[]>{
-                    { nameof(Exception) , [e.Message] }
+                    { "LibraryItem id: " + id, [e.Message] }
                 };
                 return TypedResults.BadRequest(errors);
             }

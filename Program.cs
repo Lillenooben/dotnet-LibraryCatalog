@@ -1,7 +1,7 @@
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddSingleton<DbObject>(new DbObject());
+builder.Services.AddSingleton<DbObject>(new DbObject());//Lägger till en referens till en DbObject som ska användas som en Singleton genom hela programmet
 
 var app = builder.Build();
 

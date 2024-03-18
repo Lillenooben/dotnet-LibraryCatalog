@@ -9,12 +9,11 @@ public static class CategoryRouteBuilder {
             return TypedResults.Ok(listOfCategoryResults);
         });
 
-        group.MapGet("/{id}", Results<Ok<Category>, BadRequest<Dictionary<string, string[]>>> (HttpContext context, DbObject db, int id) => {
+        group.MapGet("/{id}", Results<Ok<Category>, BadRequest<Dictionary<string, string[]>>> (DbObject db, int id) => {
             //Returns a category by its id 
             try {
                 Category singleCategory = db.SelectCategoryById(id);
                 return TypedResults.Ok(singleCategory);
-
             } catch (Exception e) {
                 Console.WriteLine(e);
                 Console.WriteLine(e.Message);
@@ -26,16 +25,16 @@ public static class CategoryRouteBuilder {
             
         });
 
-        group.MapPost("/", Results<Created, BadRequest<Dictionary<string, string[]>>> (DbObject db, NameInput category) => {
+        group.MapPost("/", Results<Created, BadRequest<Dictionary<string, string[]>>> (DbObject db, NameInput categoryName) => {
             //Creates a new category (the category model should be passed in the request body)
             try {
-                db.InsertCategory(category.Name.Trim());
+                db.InsertCategory(categoryName.Name.Trim());
                 return TypedResults.Created("/categories");
             } catch(Exception e) {
                 Console.WriteLine(e);
                 Console.WriteLine(e.Message);
                 var errors = new Dictionary<string, string[]>{
-                    { "CategoryName: " + category.Name, [e.Message] }
+                    { "CategoryName: " + categoryName.Name, [e.Message] }
                 };
                 return TypedResults.BadRequest(errors);
             }

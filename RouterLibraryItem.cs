@@ -11,7 +11,6 @@ public static class LibraryItemRouteBuilder {
 
             try {
                 var listOfLibraryItems = db.SelectLibraryItems(hasSortTypeValue, sortType);
-                
                 return TypedResults.Ok(listOfLibraryItems);
             } catch (Exception e) {
                 Console.WriteLine(e);

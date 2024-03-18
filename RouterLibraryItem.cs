@@ -175,6 +175,7 @@ public static class LibraryItemRouteBuilder {
         group.MapPut("/{id}", Results<Ok, BadRequest<Dictionary<string, string[]>>> (DbObject db, int id, [FromBody]LibraryItemInput libraryItemInput) => {
             //Updates an existing library item. Depending on the type of item certain rules may apply. 
             try {
+                Console.WriteLine("\n\n" + libraryItemInput);
                 db.UpdateLibraryItem(id, libraryItemInput);
                 return TypedResults.Ok();
             } catch (Exception e) {

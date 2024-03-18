@@ -1,39 +1,39 @@
 GET http://localhost:5052/
 
 ###
-GET http://localhost:5052/libraryitems?sort=type
+GET http://localhost:5052/libraryitems?sort=category
 
 ###
-GET http://localhost:5052/libraryitems/2
+GET http://localhost:5052/libraryitems/
 
 ### //public record LibraryItemInput(int CategoryId, string? Title, string Type, string? Author, int? Pages, int? RunTimeMinutes, string? Borrower, DateTime? BorrowDate);
 POST http://localhost:5052/libraryitems
 content-type: application/json
 
 {
-    "categoryId": 3,
-    "title": "Sherlock Holmes 5",
-    "type": "book",
-    "author": "Herr. Doyle",
-    "pages": "99",
+    "categoryId": 1,
+    "title": "To Be Deleted",
+    "type": "referencebook",
+    "author": "Herr. Test",
+    "pages": 900,
     "runTimeMinutes": null
 }
 
 ###
-PUT http://localhost:5052/libraryitems/4
+PUT http://localhost:5052/libraryitems/3
 content-type: application/json
 
 {
-    "categoryId": 2,
-    "title": "Sherlock Holmes",
-    "type": "Book",
-    "author": "Herr. Doyle",
-    "pages": 200,
-    "runTimeMinutes": null,
+    "categoryId": 7,
+    "title": "Tale of the Ring 3",
+    "type": "book",
+    "author": "Mr. Tolk",
+    "pages": 345,
+    "runTimeMinutes": null
 }
 
 ###
-POST http://localhost:5052/libraryitems/2/borrow
+POST http://localhost:5052/libraryitems/5/borrow
 content-type: application/json
 
 {
@@ -41,23 +41,23 @@ content-type: application/json
 }
 
 ###
-POST http://localhost:5052/libraryitems/2/return
+POST http://localhost:5052/libraryitems/5/return
 
 ###
-DELETE http://localhost:5052/libraryitems/4
+DELETE http://localhost:5052/libraryitems/8
 
 ###
 GET http://localhost:5052/categories
 
 ###
-GET http://localhost:5052/categories/2
+GET http://localhost:5052/categories/1
 
 ###
 POST http://localhost:5052/categories
 content-type: application/json
 
 {
-    "name": "Mystery"
+    "name": "Action"
 }
 
 ###
@@ -69,4 +69,4 @@ content-type: application/json
 }
 
 ###
-DELETE http://localhost:5052/categories/2
+DELETE http://localhost:5052/categories/4

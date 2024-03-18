@@ -35,7 +35,7 @@ public class DbObject {
         reader["runTimeMinutes"] != DBNull.Value ? (long?)reader["runTimeMinutes"] : null, 
         (long)reader["isBorrowable"] == 1 ? true : false, 
         reader["borrower"] != DBNull.Value ? (string?)reader["borrower"] : null, 
-        reader["date"] != DBNull.Value ? DateTime.UnixEpoch.AddSeconds((long)reader["date"]).ToString("dd/MM/yyyy") : null);
+        reader["borrowDate"] != DBNull.Value ? DateTime.UnixEpoch.AddSeconds((long)reader["borrowDate"]).ToString("dd/MM/yyyy") : null);
     }
 
     private Category NewCategoryFromReader(SqliteDataReader reader) {//returnerar läser datan från en SqliteDataReader och konverterar det till en Category
@@ -95,11 +95,14 @@ public class DbObject {
                 runTimeMinutes INTEGER,
                 isBorrowable INTEGER,
                 borrower TEXT,
-                date INTEGER
+                borrowDate INTEGER
             )
         ";
         createLibraryItemsTableCommand.ExecuteReader();
-        //public record LibraryItem(int Id, int CategoryId, string Title, string Type, string Author, int Pages, int RunTimeMinutes, bool IsBorrowable, string Borrower, DateTime Date);
+        //har inte tid, orkar inte bygga om, men hade velat ha en separat bool för isBorrowable och isCurrentlyBorrowed
+        //hade även velat ha borrowDate och borrowedUntilDate så man vet när den blev lånad, och hur när den ska tillbaka.
+        //bestämde mig att ha borrowDate som när den ska returneras eftersom det känns mest relevant när man vill leta upp information om ett libraryItem
+        
     }
 
     public void InsertCategory(string categoryName) {//tar emot en sträng categoryName och skapar en ny category med det namnet ifall det inte redan finns
@@ -327,7 +330,7 @@ public class DbObject {
             ";
             insertLibraryItemCommand.Parameters.AddWithValue("$CategoryId", libraryItemInput.CategoryId);
             insertLibraryItemCommand.Parameters.AddWithValue("$Title", libraryItemInput.Title != null ? libraryItemInput.Title.Trim() : DBNull.Value); //vissa fält får vara tomma
-            insertLibraryItemCommand.Parameters.AddWithValue("$Type", libraryItemInput.Type);
+            insertLibraryItemCommand.Parameters.AddWithValue("$Type", libraryItemInput.Type.ToUpper());
             insertLibraryItemCommand.Parameters.AddWithValue("$Author", libraryItemInput.Author != null ? libraryItemInput.Author.Trim() : DBNull.Value);
             insertLibraryItemCommand.Parameters.AddWithValue("$Pages", libraryItemInput.Pages != null ? libraryItemInput.Pages : DBNull.Value);
             insertLibraryItemCommand.Parameters.AddWithValue("$RunTimeMinutes", libraryItemInput.RunTimeMinutes != null ? libraryItemInput.RunTimeMinutes : DBNull.Value);
@@ -362,12 +365,12 @@ public class DbObject {
             borrowLibraryItemCommand.CommandText = 
             @"
                 UPDATE libraryitems_table
-                SET borrower = $name, date = $date
+                SET borrower = $name, borrowDate = $borrowDate
                 WHERE id = $id
             ";
 
             borrowLibraryItemCommand.Parameters.AddWithValue("$name", name.Trim());
-            borrowLibraryItemCommand.Parameters.AddWithValue("$date", dueDateUnix);
+            borrowLibraryItemCommand.Parameters.AddWithValue("$borrowDate", dueDateUnix);
             borrowLibraryItemCommand.Parameters.AddWithValue("$id", id);
 
             borrowLibraryItemCommand.ExecuteReader();
@@ -393,7 +396,7 @@ public class DbObject {
             borrowLibraryItemCommand.CommandText = 
             @"
                 UPDATE libraryitems_table
-                SET borrower = NULL, date = NULL
+                SET borrower = NULL, borrowDate = NULL
                 WHERE id = $id
             ";
             borrowLibraryItemCommand.Parameters.AddWithValue("$id", id);
@@ -423,12 +426,12 @@ public class DbObject {
             updateLibraryItemCommand.CommandText = 
             @"
                 UPDATE libraryitems_table 
-                SET categoryId = $CategoryId, title = $Title, type = $Type, author = $Author, pages = $Pages, runTimeMinutes = $RunTimeMinutes, isBorrowable = $IsBorrowable, borrower = NULL, date = NULL
+                SET categoryId = $CategoryId, title = $Title, type = $Type, author = $Author, pages = $Pages, runTimeMinutes = $RunTimeMinutes, isBorrowable = $IsBorrowable, borrower = NULL, borrowDate = NULL
                 WHERE id = $id;
             ";
             updateLibraryItemCommand.Parameters.AddWithValue("$CategoryId", libraryItemInput.CategoryId);
             updateLibraryItemCommand.Parameters.AddWithValue("$Title", libraryItemInput.Title != null ? libraryItemInput.Title.Trim() : DBNull.Value);//vissa fält får vara tomma
-            updateLibraryItemCommand.Parameters.AddWithValue("$Type", libraryItemInput.Type);
+            updateLibraryItemCommand.Parameters.AddWithValue("$Type", libraryItemInput.Type.ToUpper());
             updateLibraryItemCommand.Parameters.AddWithValue("$Author", libraryItemInput.Author != null ? libraryItemInput.Author.Trim() : DBNull.Value);
             updateLibraryItemCommand.Parameters.AddWithValue("$Pages", libraryItemInput.Pages != null ? libraryItemInput.Pages : DBNull.Value);
             updateLibraryItemCommand.Parameters.AddWithValue("$RunTimeMinutes", libraryItemInput.RunTimeMinutes != null ? libraryItemInput.RunTimeMinutes : DBNull.Value);
